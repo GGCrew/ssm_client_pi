@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset='utf-8'/>
+
+		<script type='text/javascript'>
+			var LIBS={
+				degToRad: function(angle){
+					return(angle * Math.PI / 180);
+				},
+
+				get_projection: function(angle, a, zMin, zMax) {
+					var tan = Math.tan(LIBS.degToRad(0.5 * angle));
+					var A = -(zMax + zMin) / (zMax - zMin);
+					var B = (-2 * zMax * zMin) / (zMax - zMin);
+
+					return [
+						.5/tan,	0,			0,	0,
+						0,		.5*a/tan,	0,	0,
+						0,		0,			A, -1,
+						0,		0,			B,	0
+					];
+				},
+
+				get_I4: function() {
+					return [1,0,0,0,
+							0,1,0,0,
+							0,0,1,0,
+							0,0,0,1];
+				},
+
+				reset_I4: function(m) {
+					m[0]=1;  m[1]=0;  m[2]=0;  m[3]=0;
+					m[4]=0;  m[5]=1;  m[6]=0;  m[7]=0;
+					m[8]=0;  m[9]=0;  m[10]=1; m[11]=0;
+					m[12]=0; m[13]=0; m[14]=0; m[15]=1;
+				},
+
+				scale_I4: function(m, cW, cH, tW, tH) {
+					// Set defaults
+					var xRatio = tW / cW;
+					var yRatio = tH / cH;
+
+					// Compute scaling ratios
+					if ( xRatio < yRatio) {
+						xRatio = xRatio / yRatio;
+						yRatio = 1.;
+					} else {
+						yRatio = yRatio / xRatio;
+						xRatio = 1.;
+					}
+
+					m[0]=xRatio;	m[1]=0;			m[2]=0;  m[3]=0;
+					m[4]=0;  		m[5]=yRatio;	m[6]=0;  m[7]=0;
+					m[8]=0;			m[9]=0;			m[10]=1; m[11]=0;
+					m[12]=0;		m[13]=0;		m[14]=0; m[15]=1;
+				},
+
+				translateX: function(m, t){
+					m[12] += t;
+				},
+
+				translateY: function(m, t){
+					m[13] += t;
+				},
+
+				translateZ: function(m, t){
+					m[14] += t;
+				},
+
+				rotateX: function(m, angle) {
+					var c=Math.cos(angle);
+					var s=Math.sin(angle);
+					var mv1=m[1];
+					var mv5=m[5];
+					var	mv9=m[9];
+
+					m[1]=m[1]*c-m[2]*s;
+					m[5]=m[5]*c-m[6]*s;
+					m[9]=m[9]*c-m[10]*s;
+
+					m[2]=m[2]*c+mv1*s;
+					m[6]=m[6]*c+mv5*s;
+					m[10]=m[10]*c+mv9*s;
+				},
+
+				rotateY: function(m, angle) {
+					var c=Math.cos(angle);
+					var s=Math.sin(angle);
+					var mv0=m[0];
+					var mv4=m[4];
+					var mv8=m[8];
+
+					m[0]=c*m[0]+s*m[2];
+					m[4]=c*m[4]+s*m[6];
+					m[8]=c*m[8]+s*m[10];
+
+					m[2]=c*m[2]-s*mv0;
+					m[6]=c*m[6]-s*mv4;
+					m[10]=c*m[10]-s*mv8;
+				},
+
+				rotateZ: function(m, angle) {
+					var c=Math.cos(angle);
+					var s=Math.sin(angle);
+					var mv0=m[0];
+					var mv4=m[4];
+					var mv8=m[8];
+
+					m[0]=c*m[0]-s*m[1];
+					m[4]=c*m[4]-s*m[5];
+					m[8]=c*m[8]-s*m[9];
+
+					m[1]=c*m[1]+s*mv0;
+					m[5]=c*m[5]+s*mv4;
+					m[9]=c*m[9]+s*mv8;
+				}
+			}
+		</script>
+
+		<script type='text/javascript'>
+			var main=function() {
+				var CANVAS=document.getElementById("your_canvas");
+
+				// Resize the Canvas to full browser size
+				CANVAS.width=window.innerWidth;
+				CANVAS.height=window.innerHeight;
+
+				/*========================= GET WEBGL CONTEXT ========================= */
+				try {
+					var GL = CANVAS.getContext("experimental-webgl", {antialias: true});
+				} catch (e) {
+					alert("You are not webgl compatible :(") ;
+					return false;
+				} ;
+
+				/*========================= SHADERS ========================= */
+
+				/*
+					The vertex shader is executed for each summit of the triangle (3 times). 
+					It computes the position of the point on the viewport (displayed on the canvas), gl_Position. 
+					gl_Position is given in clipping coordinates
+				*/
+				var shader_vertex_source="\n\
+attribute vec3 position; //the 3D position of the point\n\
+attribute vec2 uv; // The x,y coordinates of the texture\n\
+varying vec2 vUV; // Used to give the pixel data to the fragment shader.  This value will change during render\n\
+uniform mat4 Pmatrix; // Creating a projection matrix, which represents the viewable area.  This value will remain constant during render.\n\
+uniform mat4 Vmatrix; // Movement matrix for the view (camera)\n\
+uniform mat4 Mmatrix; // Movement matrix for the object\n\
+uniform mat4 Smatrix; // Scaling matrix for the object\n\
+void main(void) { //pre-built function\n\
+// Order of P,V,M is important!!!\n\
+gl_Position = Pmatrix * Vmatrix * Mmatrix * Smatrix * vec4(position, 1.); //0. is the z, and 1 is w\n\
+vUV=uv;\n\
+}";
+
+
+				/*
+					The fragment(or pixel) shader is executed for each pixel of the render of the triangle. 
+					It returns the RGBA color of the pixel with the pre-build variable gl_FragColor.
+				*/
+				var shader_fragment_source="\n\
+precision mediump float;\n\
+varying vec2 vUV; // Get the pixel coordinates from the vertex shader vUV variable.\n\
+uniform sampler2D sampler; // The texture.\n\
+uniform float alpha;\n\
+void main(void) {\n\
+vec4 pixel = texture2D(sampler, vUV);\n\
+gl_FragColor = vec4(pixel.rgb, alpha);\n\
+}";
+
+
+				/*
+					this function is used to compile a shader
+				*/
+				var get_shader=function(source, type) {
+					var shader = GL.createShader(type);
+					GL.shaderSource(shader, source);
+					GL.compileShader(shader);
+					if (!GL.getShaderParameter(shader, GL.COMPILE_STATUS)) {
+						switch(type) {
+							case GL.VERTEX_SHADER:
+								typestring = "VERTEX";
+								break;
+
+							case GL.FRAGMENT_SHADER:
+								typestring = "FRAGMENT";
+								break;
+
+							default:
+								typestring = "UNKNOWN";
+						}
+						alert("ERROR IN "+typestring+ " SHADER : " + GL.getShaderInfoLog(shader));
+						return false;
+					}
+					return shader;
+				};
+
+				// Compile the shaders
+				var shader_vertex=get_shader(shader_vertex_source, GL.VERTEX_SHADER);
+				var shader_fragment=get_shader(shader_fragment_source, GL.FRAGMENT_SHADER);
+
+				//  Creation of the shader program
+				var SHADER_PROGRAM=GL.createProgram();
+				GL.attachShader(SHADER_PROGRAM, shader_vertex);
+				GL.attachShader(SHADER_PROGRAM, shader_fragment);
+
+				// Link the shader program to the webgl context GL, in order to match the shader variables to javascript variables.
+				GL.linkProgram(SHADER_PROGRAM);
+				var _uv = GL.getAttribLocation(SHADER_PROGRAM, "uv");
+				var _position = GL.getAttribLocation(SHADER_PROGRAM, "position");
+
+				// GLSL attributes variables must be enabled
+				GL.enableVertexAttribArray(_uv);
+				GL.enableVertexAttribArray(_position);
+
+				// Uniforms do not need to be enabled like attributes, just linked.
+				// Link Pmatrix GLSL variable to _Pmatrix javascript variable.
+				var _Pmatrix = GL.getUniformLocation(SHADER_PROGRAM, "Pmatrix");
+				var _Vmatrix = GL.getUniformLocation(SHADER_PROGRAM, "Vmatrix");
+				var _Mmatrix = GL.getUniformLocation(SHADER_PROGRAM, "Mmatrix");
+				var _Smatrix = GL.getUniformLocation(SHADER_PROGRAM, "Smatrix");
+				var _sampler = GL.getUniformLocation(SHADER_PROGRAM, "sampler");
+				var _alpha = GL.getUniformLocation(SHADER_PROGRAM, "alpha");
+
+				// Linking is over, tell the webgl context to use SHADER_PROGRAM for rendering.
+				GL.useProgram(SHADER_PROGRAM);
+
+				// Assign _sampler data to TEXTURE0
+				GL.uniform1i(_sampler, 0);
+
+				/*========================= THE SQUARE ========================= */
+				//POINTS :
+				var square_vertex=[
+					-1, -1,  0,   0, 0, //bottom left of the viewport
+					 1, -1,  0,   1, 0, //bottom right of the viewport
+					 1,  1,  0,   1, 1, //top right of the viewport
+					-1,  1,  0,   0, 1  //top left of the viewport
+				];
+
+				// Build the associated Vertex Buffer Object for "square_vertex".
+				var SQUARE_VERTEX= GL.createBuffer ();
+				GL.bindBuffer(GL.ARRAY_BUFFER, SQUARE_VERTEX);
+				GL.bufferData(GL.ARRAY_BUFFER, new Float32Array(square_vertex), GL.STATIC_DRAW);
+
+				//FACES :
+				// Use points with index 0,1,2 to build a triangle
+				var square_faces = [0,1,2, 0,2,3];
+				var SQUARE_FACES= GL.createBuffer ();
+				GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, SQUARE_FACES);
+				GL.bufferData(GL.ELEMENT_ARRAY_BUFFER, new Uint16Array(square_faces), GL.STATIC_DRAW);
+
+
+				/*========================= MATRIX ========================== */
+
+				// See get_projection function in libs.js for more details.
+				// 40 is the angle of the camera, in degrees.
+				// The camera only shows pixels between zMin and zMax.
+				//var PROJMATRIX = LIBS.get_projection(40, CANVAS.width / CANVAS.height, 1, 100);
+				var PROJMATRIX = LIBS.get_I4();
+				
+				// Initialize the view's movement matrix and reposition it.
+				var VIEWMATRIX = LIBS.get_I4();
+				//LIBS.translateZ(VIEWMATRIX, -10);
+
+				// Initialize the object's movement matrix.
+				var MOVEMATRIX = LIBS.get_I4();
+
+				// Initialize the object's movement matrix.
+				var SCALEMATRIX = LIBS.get_I4();
+
+
+				/*========================= TEXTURES ========================= */
+				// A function to make a webgl texture from an image URL
+				var get_texture=function(image_URL){
+					// Create a new javascript image object
+					var image=new Image();
+
+					// Store the webgl texture as a property of the image
+					image.src=image_URL;
+					image.webglTexture=false;
+
+					// Create the webgl texture object when the image has been loaded
+					image.onload=function(e) {
+						// Create the texture
+						var texture=GL.createTexture();
+
+						// Invert vertical pixel order for the texture image
+						// (This is due to different 0,0 positions between image formats and 3D rendering)
+						GL.pixelStorei(GL.UNPACK_FLIP_Y_WEBGL, true);
+
+						// Bind the texture to the context
+						GL.bindTexture(GL.TEXTURE_2D, texture);
+
+						// Send image data to the texture
+						GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, image);
+
+						// Set magnification filter
+						GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.LINEAR);
+
+						// Set minification filter
+						GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);
+
+						// Assume the texture is not POT (Power Of Two). 
+						// We cannot use default clamp mode which is GL.REPEAT (tiling). Switching to "stretch/squash" mode. 
+						GL.texParameteri( GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE );
+						GL.texParameteri( GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE );
+
+						// Free the context (facultative)
+						GL.bindTexture(GL.TEXTURE_2D, null);
+						image.webglTexture=texture;
+					}
+
+					return image;
+				}
+
+				// Create the texture from the image resource
+				var square_textures = [];
+				square_textures[0] = get_texture("resources/1.jpg");
+				square_textures[1] = get_texture("resources/2.jpg");
+
+
+
+
+				/*========================= DRAWING ========================= */
+				// Set clear color to transparent
+				GL.clearColor(0.0, 0.0, 0.0, 0.0);
+
+				// Disabling DEPTH_TEST because we're going to use lots of alpha blending.
+				// (And also use the Z-axis to scale the image)
+				GL.disable(GL.DEPTH_TEST);
+
+				// this function draws the scene
+				var frameCounter=0;
+				var animate=function() {
+
+					// set the drawing area on the canvas and clear it
+					GL.viewport(0.0, 0.0, CANVAS.width, CANVAS.height);
+					GL.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
+
+					// Set projection matrix. PROJMATRIX is a javascript array of 1 dimension with 16 floats.
+					GL.uniformMatrix4fv(_Pmatrix, false, PROJMATRIX);
+
+					// Set the view matrix
+					GL.uniformMatrix4fv(_Vmatrix, false, VIEWMATRIX);
+
+					frameCounter++;
+
+					for(var textureCounter = 0; textureCounter < square_textures.length; textureCounter++)
+					{
+						// Compute and set the scaling matrix
+						LIBS.scale_I4(SCALEMATRIX, CANVAS.width, CANVAS.height, square_textures[textureCounter].width, square_textures[textureCounter].height);
+						GL.uniformMatrix4fv(_Smatrix, false, SCALEMATRIX);
+
+
+						// Reset, compute, and set the object's movement matrix
+						LIBS.reset_I4(MOVEMATRIX);
+						GL.uniformMatrix4fv(_Mmatrix, false, MOVEMATRIX);
+
+
+						// Use these points for next drawing.
+						// GL.vertexAttribPointer(variable, dimension, type, normalize, total vertex size in bytes, offset in bytes)
+						// dimension is the number of data elements for that variable (2 for 2D position, 3 for 3D position, 3 for color_RGB)
+						// vertex size is calculated by (coordinates + (color_RGB or texture_UV) ) * size_of_data_type
+						// offset is calculated by vertex_data_position * size_of_data_type
+						// (GL.FLOAT is 4 bytes)
+						GL.vertexAttribPointer(_position, 3, GL.FLOAT, false, (3+2)*4, 0*4) ;
+						GL.vertexAttribPointer(_uv, 2, GL.FLOAT, false, (3+2)*4, 3*4) ;
+						GL.bindBuffer(GL.ARRAY_BUFFER, SQUARE_VERTEX);
+
+
+						// Send texture data before drawing the square
+						// Check if webgl texture is loaded
+						if (square_textures[textureCounter].webglTexture) {
+							// Specify sampler texture 0
+							GL.activeTexture(GL.TEXTURE0);
+
+							GL.bindTexture(GL.TEXTURE_2D, square_textures[textureCounter].webglTexture);
+						}
+
+
+						// Compute and set the texture's alpha level
+						var modAlpha = 1.;
+						var modCounter = 0;
+						switch(textureCounter) {
+							case 0:
+								modCounter = (frameCounter % 400);
+								if(modCounter < 100)
+								{
+									modAlpha = (100 - (frameCounter % 100)) / 100.;
+								} else if(modCounter < 200) {
+									modAlpha = 0.;
+								} else if(modCounter < 300) {
+									modAlpha = (frameCounter % 100) / 100.;
+								} else {
+									modAlpha = 1.;
+								}
+								break;
+
+							case 1:
+								modCounter = (frameCounter % 400);
+								if(modCounter < 100)
+								{
+									modAlpha = (frameCounter % 100) / 100.;
+								} else if(modCounter < 200) {
+									modAlpha = 1.;
+								} else if(modCounter < 300) {
+									modAlpha = (100 - (frameCounter % 100)) / 100.;
+								} else {
+									modAlpha = 0.;
+								}
+								break;
+						}
+						GL.enable(GL.BLEND);
+						GL.blendFunc(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA);
+						GL.uniform1f(_alpha, modAlpha);
+
+
+						// Draw the square
+						GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, SQUARE_FACES);
+						// Number of elements is calculated by faces * triangles * coordinates (2 for 2D, 3 for 3D)
+						GL.drawElements(GL.TRIANGLES, 1*2*3, GL.UNSIGNED_SHORT, 0);
+					}
+
+
+					// Drawing is finished. Show the render
+					GL.flush();
+
+					// Redraws the scene as soon as ready
+					window.requestAnimationFrame(animate);
+				}
+
+				// Launch animate for the first time
+				animate();
+			}
+		</script>
+	</head>
+
+	<body style='margin:0px' onload='main()'>
+		<canvas id='your_canvas' style='position: absolute; background-color: black;'></canvas>
+	</body>
+</html>

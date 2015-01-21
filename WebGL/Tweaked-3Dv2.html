@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset='utf-8'/>
+
+		<script type='text/javascript'>
+			var LIBS={
+				degToRad: function(angle){
+					return(angle * Math.PI / 180);
+				},
+
+				get_projection: function(angle, a, zMin, zMax) {
+					var tan = Math.tan(LIBS.degToRad(0.5 * angle));
+					var A = -(zMax + zMin) / (zMax - zMin);
+					var B = (-2 * zMax * zMin) / (zMax - zMin);
+
+					return [
+						.5/tan,	0,			0,	0,
+						0,		.5*a/tan,	0,	0,
+						0,		0,			A, -1,
+						0,		0,			B,	0
+					];
+				},
+
+				get_I4: function() {
+					return [1,0,0,0,
+							0,1,0,0,
+							0,0,1,0,
+							0,0,0,1];
+				},
+
+				reset_I4: function(m) {
+					m[0]=1;  m[1]=0;  m[2]=0;  m[3]=0;
+					m[4]=0;  m[5]=1;  m[6]=0;  m[7]=0;
+					m[8]=0;  m[9]=0;  m[10]=1; m[11]=0;
+					m[12]=0; m[13]=0; m[14]=0; m[15]=1;
+				},
+
+				scale_I4: function(m, cW, cH, tW, tH) {
+					// Set defaults
+					var xRatio = tW / cW;
+					var yRatio = tH / cH;
+
+					// Compute scaling ratios
+					if ( xRatio < yRatio) {
+						xRatio = xRatio / yRatio;
+						yRatio = 1.;
+					} else {
+						yRatio = yRatio / xRatio;
+						xRatio = 1.;
+					}
+
+					m[0]=xRatio;	m[1]=0;			m[2]=0;  m[3]=0;
+					m[4]=0;  		m[5]=yRatio;	m[6]=0;  m[7]=0;
+					m[8]=0;			m[9]=0;			m[10]=1; m[11]=0;
+					m[12]=0;		m[13]=0;		m[14]=0; m[15]=1;
+				},
+
+				translateX: function(m, t){
+					m[12] += t;
+				},
+
+				translateY: function(m, t){
+					m[13] += t;
+				},
+
+				translateZ: function(m, t){
+					m[14] += t;
+				},
+
+				rotateX: function(m, angle) {
+					var c=Math.cos(angle);
+					var s=Math.sin(angle);
+					var mv1=m[1];
+					var mv5=m[5];
+					var	mv9=m[9];
+
+					m[1]=m[1]*c-m[2]*s;
+					m[5]=m[5]*c-m[6]*s;
+					m[9]=m[9]*c-m[10]*s;
+
+					m[2]=m[2]*c+mv1*s;
+					m[6]=m[6]*c+mv5*s;
+					m[10]=m[10]*c+mv9*s;
+				},
+
+				rotateY: function(m, angle) {
+					var c=Math.cos(angle);
+					var s=Math.sin(angle);
+					var mv0=m[0];
+					var mv4=m[4];
+					var mv8=m[8];
+
+					m[0]=c*m[0]+s*m[2];
+					m[4]=c*m[4]+s*m[6];
+					m[8]=c*m[8]+s*m[10];
+
+					m[2]=c*m[2]-s*mv0;
+					m[6]=c*m[6]-s*mv4;
+					m[10]=c*m[10]-s*mv8;
+				},
+
+				rotateZ: function(m, angle) {
+					var c=Math.cos(angle);
+					var s=Math.sin(angle);
+					var mv0=m[0];
+					var mv4=m[4];
+					var mv8=m[8];
+
+					m[0]=c*m[0]-s*m[1];
+					m[4]=c*m[4]-s*m[5];
+					m[8]=c*m[8]-s*m[9];
+
+					m[1]=c*m[1]+s*mv0;
+					m[5]=c*m[5]+s*mv4;
+					m[9]=c*m[9]+s*mv8;
+				}
+			}
+		</script>
+
+		<script type='text/javascript'>
+			var IMAGE_COUNT = 2;
+
+			var GL;
+			
+			function main() {
+				var egl = {};
+				egl.canvas = document.getElementById('canvas');				
+				
+				// Start OGLES
+				egl_init(egl);
+
+				// initialize the OGLES model
+				egl_init_model(egl);
+
+				// initialize the OGLES texture(s)
+				egl_init_textures(egl);
+
+				egl_init_shaders(egl);
+				
+				egl_init_matrices(egl);
+
+				terminate = false;
+				while (!terminate)
+				{
+					//console.log(egl.frameCounter);
+					
+					var colorLevel = ((1 / 1200) * egl.frameCounter);
+					GL.clearColor(0.0, 1 - colorLevel, colorLevel, 1.0);
+					
+					egl_draw(egl);
+
+					if(egl.frameCounter > 1200) {terminate = true;}
+				}
+
+				egl_destroy(egl);
+
+				console.log("Done!");
+			}
+			
+			function egl_init(egl) {
+				egl.frameCounter = 0;
+				
+				egl_init_egl(egl);
+
+				//egl_init_shaders(egl);
+
+				//glGenBuffers(1, egl.frameBuffer);
+				GL.createBuffer(egl.frameBuffer);
+				
+				// Set clear color (and alpha)
+				GL.clearColor(0.0, 0.5, 0.0, 1.0);
+
+				// Clear the screen (based on above settings)
+				GL.clear(GL.COLOR_BUFFER_BIT);
+
+				// Disabling DEPTH_TEST because we're going to use lots of alpha blending.
+				// (And possibly use the Z-axis to scale the image)
+				GL.disable(GL.DEPTH_TEST);
+			}
+			
+			function egl_init_egl(egl) {
+				egl.screenWidth = window.innerWidth;
+				egl.screenHeight = window.innerHeight;
+
+				egl.canvas.width = egl.screenWidth;
+				egl.canvas.height = egl.screenHeight;
+				
+				GL = egl.canvas.getContext("experimental-webgl", {antialias: true});
+			}
+			
+			function egl_init_model(egl) {
+				egl.squareVertices = []
+				egl.squareVertices[0]  = -1.; egl.squareVertices[1]  = -1.;  egl.squareVertices[2]  = 0.;	// bottom left of the square
+				egl.squareVertices[3]  =  0.; egl.squareVertices[4]  =  0.;							// bottom left u,v coordinates for texture
+				egl.squareVertices[5]  =  1.; egl.squareVertices[6]  = -1.;  egl.squareVertices[7]  = 0.;	// bottom right of the square
+				egl.squareVertices[8]  =  1., egl.squareVertices[9]  =  0.;							// bottom right u,v coordinates for texture
+				egl.squareVertices[10] =  1.; egl.squareVertices[11] =  1.;  egl.squareVertices[12] = 0.;	// top right of the square
+				egl.squareVertices[13] =  1.; egl.squareVertices[14] =  1.;							// top right u,v coordinates for texture
+				egl.squareVertices[15] = -1.; egl.squareVertices[16] =  1.;  egl.squareVertices[17] = 0.;	// top left of the square
+				egl.squareVertices[18] =  0.; egl.squareVertices[19] =  1.;							// top left u,v coordinates for texture
+
+				// Build the associated Vertex Buffer Object for "egl.squareVertices".
+				//GL.genBuffers(1, egl.squareVertexBuffer);
+				egl.squareVertexBuffer = GL.createBuffer();
+				GL.bindBuffer(GL.ARRAY_BUFFER, egl.squareVertexBuffer);
+				//GL.bufferData(GL.ARRAY_BUFFER, sizeof(egl.squareVertices), egl.squareVertices, GL.STATIC_DRAW);
+				GL.bufferData(GL.ARRAY_BUFFER, new Float32Array(egl.squareVertices), GL.STATIC_DRAW);
+
+				//FACES :
+				// Use points with index 0,1,2 to build a triangle
+				egl.squareFaces = [];
+				egl.squareFaces[0] = 0; egl.squareFaces[1] = 1; egl.squareFaces[2] = 2;
+				egl.squareFaces[3] = 0; egl.squareFaces[4] = 2; egl.squareFaces[5] = 3;
+				//GL.genBuffers(1, egl.squareFaceBuffer);
+				egl.squareFaceBuffer = GL.createBuffer();
+				GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, egl.squareFaceBuffer);
+				//GL.bufferData(GL.ELEMENT_ARRAY_BUFFER, sizeof(egl.squareFaces), egl.squareFaces, GL.STATIC_DRAW);
+				GL.bufferData(GL.ELEMENT_ARRAY_BUFFER, new Uint16Array(egl.squareFaces), GL.STATIC_DRAW);
+				console.log(egl.squareFaceBuffer);
+			}
+			
+			function egl_init_textures(egl) {
+				var imageCounter;
+
+				// Assign egl.texture to TEXTURE0
+				GL.uniform1i(egl.texture, 0);
+
+
+				// using SDL to load non-BMP picture formats
+				egl.images = [];
+				//egl.images[0] = IMG_Load("images/1.jpg");
+				egl.images[0] = new Image();
+				egl.images[0].index = 0;
+				egl.images[0].src = "images/1.jpg";
+				//egl.images[1] = IMG_Load("images/2.jpg");
+				egl.images[1] = new Image();
+				egl.images[1].index = 0;
+				egl.images[1].src = "images/2.jpg";
+
+				egl.textures = [];
+				for(imageCounter = 0; imageCounter < IMAGE_COUNT; imageCounter++)
+				{
+					egl.images[imageCounter].onload = function(e) {
+						var imageCounter = e.target.index;
+						
+						// Create the texture
+						//glGenTextures(1, egl.textures[imageCounter]);
+						egl.textures[imageCounter] = GL.createTexture();
+
+						// Invert vertical pixel order for the texture image
+						// (This is due to different 0,0 positions between image formats and 3D rendering)
+						GL.pixelStorei(GL.UNPACK_FLIP_Y_WEBGL, true);
+
+						// Bind the texture to the context
+						GL.bindTexture(GL.TEXTURE_2D, egl.textures[imageCounter]);
+
+						// Load	the image data into the texture
+						GL.texImage2D(GL.TEXTURE_2D, 0,
+										GL.RGB, egl.images[imageCounter].w, egl.images[imageCounter].h,
+										0,
+										GL.RGB, GL.UNSIGNED_BYTE, egl.images[imageCounter].pixels);
+
+						// Set magnification filter
+						GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.LINEAR);
+
+						// Set minification filter
+						GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);
+
+						// Assume the texture is not POT (Power Of Two). 
+						// We cannot use default clamp mode which is GL.REPEAT (tiling). Switching to "stretch/squash" mode. 
+						GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE );
+						GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE );
+
+						// Free the context (optional)
+						//glBindTexture(GL.TEXTURE_2D, NULL);
+					}
+				}
+			}
+			
+			function egl_init_shaders(egl) {
+				var vertexShaderStr =
+					"attribute vec3 position;" + 
+					"attribute vec2 uv;" + 
+					"varying vec2 vUV;" + 
+					"uniform mat4 Pmatrix;" + 
+					"uniform mat4 Vmatrix;" + 
+					"uniform mat4 Mmatrix;" + 
+					"uniform mat4 Smatrix;" + 
+					"void main(void) {" + 
+					"gl_Position = Pmatrix * Vmatrix * Mmatrix * Smatrix * vec4(position, 1.);" + 
+					"vUV=uv;" + 
+					"}";
+				//console.log(vertexShaderStr);
+
+				var fragmentShaderStr = 
+					"precision mediump float;" + 
+					"varying vec2 vUV;" + 
+					"uniform sampler2D texture;" + 
+					"uniform float alpha;" + 
+					"void main(void) {" + 
+					"vec4 pixel = texture2D(texture, vUV);" + 
+					"gl_FragColor = vec4(pixel.rgb, alpha);" + 
+					"}";
+				//console.log(fragmentShaderStr);
+
+				egl.vertexShader = GL.createShader(GL.VERTEX_SHADER);
+				GL.shaderSource(egl.vertexShader, vertexShaderStr);
+				GL.compileShader(egl.vertexShader);
+
+				egl.fragmentShader = GL.createShader(GL.FRAGMENT_SHADER);
+				GL.shaderSource(egl.fragmentShader, fragmentShaderStr);
+				GL.compileShader(egl.fragmentShader);
+
+				egl.shaderProgram = GL.createProgram();
+				GL.attachShader(egl.shaderProgram, egl.vertexShader);
+				GL.attachShader(egl.shaderProgram, egl.fragmentShader);
+
+				GL.linkProgram(egl.shaderProgram);
+
+				// error checking for glLinkProgram() goes here!
+
+				// Link OpenGL shader variables to local variables
+				egl.uv = GL.getAttribLocation(egl.shaderProgram, "uv");
+				egl.position = GL.getAttribLocation(egl.shaderProgram, "position");
+
+				// GLSL attributes variables must be enabled
+				GL.enableVertexAttribArray(egl.uv);
+				GL.enableVertexAttribArray(egl.position);
+
+				// Uniforms do not need to be enabled like attributes, just linked.
+				// Link Pmatrix GLSL variable to _Pmatrix javascript variable.
+				egl.Pmatrix = GL.getUniformLocation(egl.shaderProgram, "Pmatrix");
+				egl.Vmatrix = GL.getUniformLocation(egl.shaderProgram, "Vmatrix");
+				egl.Mmatrix = GL.getUniformLocation(egl.shaderProgram, "Mmatrix");
+				egl.Smatrix = GL.getUniformLocation(egl.shaderProgram, "Smatrix");
+				egl.texture = GL.getUniformLocation(egl.shaderProgram, "texture");
+				egl.alpha   = GL.getUniformLocation(egl.shaderProgram, "alpha");
+
+				// Linking is over, tell the gl context to use shaderProgram for rendering.
+				// (This os OK at this point because we only have 1 shader program.)
+				GL.useProgram(egl.shaderProgram);
+			}
+			
+			function egl_init_matrices(egl)
+			{
+				egl.projectionMatrix = [];
+				egl.viewMatrix = [];
+				egl.movementMatrix = [];
+				egl.scalingMatrix = [];
+
+				reset_matrix(egl.projectionMatrix);
+				reset_matrix(egl.viewMatrix);
+				reset_matrix(egl.movementMatrix);
+				reset_matrix(egl.scalingMatrix);
+			}
+
+			function egl_draw(egl) {
+				egl.frameCounter++;
+				
+				GL.viewport(0, 0, egl.screenWidth, egl.screenHeight);
+				GL.clear(GL.COLOR_BUFFER_BIT);
+				
+				reset_matrix(egl.projectionMatrix);
+				GL.uniformMatrix4fv(egl.Pmatrix, false, egl.projectionMatrix);
+				
+				reset_matrix(egl.viewMatrix);
+				GL.uniformMatrix4fv(egl.Vmatrix, false, egl.viewMatrix);
+				
+				for(textureCounter = 0; textureCounter < IMAGE_COUNT; textureCounter++)
+				{
+
+					// Compute and set the scaling matrix
+					scale_matrix(egl.scalingMatrix, egl.screenWidth, egl.screenHeight, egl.images[textureCounter].width, egl.images[textureCounter].height);
+					GL.uniformMatrix4fv(egl.Smatrix, false, egl.scalingMatrix);
+
+					// Reset, compute, and set the object's movement matrix
+					reset_matrix(egl.movementMatrix);
+					GL.uniformMatrix4fv(egl.Mmatrix, false, egl.movementMatrix);
+				}
+
+				GL.vertexAttribPointer(egl.position, 3, GL.FLOAT, GL.FALSE, (3+2)*4, (0*4));
+				GL.vertexAttribPointer(egl.uv, 2, GL.FLOAT, GL.FALSE, (3+2)*4, (3*4));
+				GL.bindBuffer(GL.ARRAY_BUFFER, egl.squareVertexBuffer);
+				
+				GL.activeTexture(GL.TEXTURE0);
+				GL.bindTexture(GL.TEXTURE_2D, egl.textures[textureCounter]);
+				
+				modAlpha = 1.;  // debug code!  Forcing visible.
+				GL.enable(GL.BLEND);
+				GL.blendFunc(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA);
+				GL.uniform1f(egl.alpha, modAlpha);
+
+				// Draw the square
+				GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, egl.squareFaceBuffer);
+				// Number of elements is calculated by faces * triangles * coordinates (2 for 2D, 3 for 3D)
+				GL.drawElements(GL.TRIANGLES, 1*2*3, GL.UNSIGNED_SHORT, 0);
+
+		
+				
+				GL.flush();
+				
+				window.requestAnimationFrame(egl_draw);
+			}
+			
+			function egl_destroy(egl) {
+			}
+			
+			function reset_matrix(matrix) {
+				matrix[0]=1.;	matrix[1]=0.;	matrix[2]=0.;	matrix[3]=0.;
+				matrix[4]=0.;	matrix[5]=1.;	matrix[6]=0.;	matrix[7]=0.;
+				matrix[8]=0.;	matrix[9]=0.;	matrix[10]=1.;	matrix[11]=0.;
+				matrix[12]=0.;	matrix[13]=0.;	matrix[14]=0.;	matrix[15]=1.;
+			}
+			
+			function scale_matrix(matrix, screenWidth, screenHeight, textureWidth, textureHeight) {
+				// Set defaults
+				var xRatio = textureWidth / screenWidth; //tW / cW;
+				var yRatio = textureHeight / screenHeight; //tH / cH;
+				
+				// Compute scaling ratios
+				if ( xRatio < yRatio) {
+					xRatio = xRatio / yRatio;
+					yRatio = 1.;
+				} else {
+					yRatio = yRatio / xRatio;
+					xRatio = 1.;
+				}
+
+				matrix[0]=xRatio;	matrix[1]=0.;		matrix[2]=0.;  matrix[3]=0.;
+				matrix[4]=0.;  		matrix[5]=yRatio;	matrix[6]=0.;  matrix[7]=0.;
+				matrix[8]=0.;		matrix[9]=0.;		matrix[10]=1.; matrix[11]=0.;
+				matrix[12]=0.;		matrix[13]=0.;		matrix[14]=0.; matrix[15]=1.;
+			}
+		</script>
+	</head>
+
+	<body style='margin:0px' onload='main()'>
+		<canvas id='canvas' style='position: absolute; background-color: yellow;'></canvas>
+	</body>
+</html>

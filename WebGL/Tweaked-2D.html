@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+	<head>
+        <meta charset='utf-8'/>
+        <script type='text/javascript'>
+			var main=function() {
+				var CANVAS=document.getElementById("your_canvas");
+
+				// Resize the Canvas to full browser size
+				CANVAS.width=window.innerWidth;
+				CANVAS.height=window.innerHeight;
+
+				/*========================= GET WEBGL CONTEXT ========================= */
+				try {
+					var GL = CANVAS.getContext("experimental-webgl", {antialias: true});
+				} catch (e) {
+					alert("You are not webgl compatible :(") ;
+					return false;
+				} ;
+
+				/*========================= SHADERS ========================= */
+
+				/*
+					The vertex shader is executed for each summit of the triangle (3 times). 
+					It computes the position of the point on the viewport (displayed on the canvas), gl_Position. 
+					gl_Position is given in clipping coordinates
+				*/
+				var shader_vertex_source="\n\
+attribute vec2 position; //the position of the point\n\
+attribute vec3 color;  //the color of the point (color is a vector with 3 components (R,G,B))\n\
+\n\
+varying vec3 vColor; // Used to give color to the fragment shader\n\
+void main(void) { //pre-built function\n\
+gl_Position = vec4(position, 0., 1.); //0. is the z, and 1 is w\n\
+vColor=color; // vColor is interpolated between triangle points. So we will obtain a color gradient on the triangle.\n\
+}";
+
+
+				/*
+					The fragment(or pixel) shader is executed for each pixel of the render of the triangle. 
+					It returns the RGBA color of the pixel with the pre-build variable gl_FragColor.
+				*/
+				var shader_fragment_source="\n\
+precision mediump float;\n\
+\n\
+\n\
+\n\
+varying vec3 vColor; // Get the vertex shader vColor variable\n\
+void main(void) {\n\
+gl_FragColor = vec4(vColor, 1.); // Assign pixel color to vColor, with an alpha component of 1 (completely opaque)\n\
+}";
+
+
+				/*
+					this function is used to compile a shader
+				*/ 
+				var get_shader=function(source, type) {
+					var shader = GL.createShader(type);
+					GL.shaderSource(shader, source);
+					GL.compileShader(shader);
+					if (!GL.getShaderParameter(shader, GL.COMPILE_STATUS)) {
+						switch(type) {
+							case GL.VERTEX_SHADER:
+								typestring = "VERTEX";
+								break;
+
+							case GL.FRAGMENT_SHADER:
+								typestring = "FRAGMENT";
+								break;
+
+							default:
+								typestring = "UNKNOWN";
+						}
+						alert("ERROR IN "+typeString+ " SHADER : " + GL.getShaderInfoLog(shader));
+						return false;
+					}
+					return shader;
+				};
+
+				// Compile the shaders
+				var shader_vertex=get_shader(shader_vertex_source, GL.VERTEX_SHADER);
+				var shader_fragment=get_shader(shader_fragment_source, GL.FRAGMENT_SHADER);
+
+				//  Creation of the shader program
+				var SHADER_PROGRAM=GL.createProgram();
+				GL.attachShader(SHADER_PROGRAM, shader_vertex);
+				GL.attachShader(SHADER_PROGRAM, shader_fragment);
+
+				// Link the shader program to the webgl context GL, in order to match the shader variables to javascript variables.
+				GL.linkProgram(SHADER_PROGRAM);
+				var _color = GL.getAttribLocation(SHADER_PROGRAM, "color");
+				var _position = GL.getAttribLocation(SHADER_PROGRAM, "position");
+
+				// GLSL attributes variables must be enabled
+				GL.enableVertexAttribArray(_color);
+				GL.enableVertexAttribArray(_position);
+
+				// Linking is over, tells to webgl context to use SHADER_PROGRAM for rendering.
+				GL.useProgram(SHADER_PROGRAM);
+
+
+				/*========================= THE TRIANGLE ========================= */
+				//POINTS :
+				var triangle_vertex=[
+					-1,-1, //first summit -> bottom left of the viewport
+					1,0,1, //purple
+					1,-1, //bottom right of the viewport
+					1,1,1, //white
+					1,1,  //top right of the viewport
+					0,1,0 //green
+				];
+
+				// Build the associated Vertex Buffer Object for "triangle_vertex".
+				var TRIANGLE_VERTEX= GL.createBuffer ();
+				GL.bindBuffer(GL.ARRAY_BUFFER, TRIANGLE_VERTEX);
+				GL.bufferData(GL.ARRAY_BUFFER, new Float32Array(triangle_vertex), GL.STATIC_DRAW);
+
+				//FACES :
+				// Use points with index 0,1,2 to build a triangle
+				var triangle_faces = [0,1,2];
+				var TRIANGLE_FACES= GL.createBuffer ();
+				GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, TRIANGLE_FACES);
+				GL.bufferData(GL.ELEMENT_ARRAY_BUFFER, new Uint16Array(triangle_faces), GL.STATIC_DRAW);
+
+
+
+				/*========================= DRAWING ========================= */
+				// Set clear color to transparent
+				GL.clearColor(0.0, 0.0, 0.0, 0.0);
+
+				// this function draws the scene
+				var animate=function() {
+					// set the drawing area on the canvas and clear it
+					GL.viewport(0.0, 0.0, CANVAS.width, CANVAS.height);
+					GL.clear(GL.COLOR_BUFFER_BIT);
+
+					// Use these points for next drawing.
+					// GL.vertexAttribPointer(variable, dimension, type, normalize, total vertex size in bytes, offset in bytes)
+					// (GL.FLOAT is 4 bytes)
+					GL.vertexAttribPointer(_position, 2, GL.FLOAT, false, (2+3)*4, 0*4) ;
+					GL.vertexAttribPointer(_color, 3, GL.FLOAT, false, (2+3)*4, 2*4) ;
+					GL.bindBuffer(GL.ARRAY_BUFFER, TRIANGLE_VERTEX);
+
+					// Draw the triangle
+					GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, TRIANGLE_FACES);
+					GL.drawElements(GL.TRIANGLES, 3, GL.UNSIGNED_SHORT, 0);
+
+					// Drawing is finished. Show the render
+					GL.flush();
+
+					// Redraws the scene as soon as ready
+					window.requestAnimationFrame(animate);
+				}
+
+				// Launch animate for the first time
+				animate();
+			}
+		</script>
+	</head>
+
+	<body style='margin:0px' onload='main()'>
+		<canvas id='your_canvas' style='position: absolute; background-color: red;'></canvas>
+	</body>    
+</html>
