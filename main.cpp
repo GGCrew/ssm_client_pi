@@ -1,9 +1,13 @@
+#include <stdlib.h>	// abort()
+#include <unistd.h>	// getopt():
+
 #include <stdio.h>
 #include <ctype.h>	// isprint()
 #include <time.h>	// nanosleep()
 
 #include "opengl_es.h"
 #include "ssm_client.h"
+#include "ssm_server_scanner.h"
 
 
 /**/
@@ -13,7 +17,7 @@ int main (int argc, char *argv[])
 {
 	EGL_TYPE _egl, *egl=&_egl;
 	bool terminate;
-	
+
 	char *server_name = NULL;
 
 	struct timespec current_time;
@@ -25,44 +29,66 @@ int main (int argc, char *argv[])
 	/**/
 
 
-	// Parse server name (or IP address) from command line
-	int option_character;
-	while ((option_character = getopt (argc, argv, "s:")) != -1)
+	if(argc == 1)
 	{
-		switch(option_character)
+		// Automatically find the SSM Server by scanning the network
+		server_name = scan_for_ssm_server();
+	}
+	else
+	{
+		// Parse command line options
+		int option_character;
+		while ((option_character = getopt(argc, argv, "ghs:")) != -1)
 		{
-			case 's':
-				server_name = optarg;
-				break;
+			switch(option_character)
+			{
+				case 'g':
+					// Automatically find the SSM Server by scanning the network
+					server_name = scan_for_ssm_server();
+					break;
 
-			case '?':
-				switch(optopt)
-				{
-					case 's':
-						fprintf(stderr, "Option -%c requires an argument.\n", optopt);
-						break;
+				case 'h':
+					// Help options
+					fprintf(stdout, " -g\tGuess the server's IP address by scanning the local network\n");
+					fprintf(stdout, " -s\tSpecify the server's IP address (-s 123.456.78.9)\n");
+					fprintf(stdout, "\n\n");
+					return 0;
+					break;
 
-					default:
-						if(isprint(optopt))
-							fprintf(stderr, "Unknown option `-%c'.\n", optopt);
-						else
-							fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
-						break;
-				}
-				return 1;
+				case 's':
+					// Parse server name (or IP address) from command line
+					server_name = optarg;
+					break;
 
-			default:
-				abort();
+				case '?':
+					switch(optopt)
+					{
+						case 's':
+							fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+							break;
+
+						default:
+							if(isprint(optopt))
+								fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+							else
+								fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
+							break;
+					}
+					return 1;
+
+				default:
+					abort();
+			}
 		}
 	}
-
 
 	// Check that required parameters are set
 	if(!server_name)
 	{
-		fprintf(stderr, "Missing option `-s', which specifies the server name or IP address.\n");
+		fprintf(stderr, "Unable to parse or find the SSM server.\n");
 		return 1;
 	}
+	//fprintf(stderr, "server_name: %s\n", server_name);
 
 
 	/**/

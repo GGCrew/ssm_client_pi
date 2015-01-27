@@ -11,7 +11,7 @@
 /**/
 
 
-void json_get(const char *server_name, const char *url, char *json_response_text)
+int json_get(const char *server_name, const char *url, char *json_response_text)
 {
 	int sockfd;
 	int err_code;
@@ -27,13 +27,21 @@ void json_get(const char *server_name, const char *url, char *json_response_text
 	if (sockfd < 0) 
 	{
 		// Error handling goes here
+		fprintf(stderr, "\tjson_get() -- socket(AF_INET, SOCK_STREAM, 0)\n");
+		fprintf(stderr, "\t\tError!!!\n");
+		strcpy(json_response_text, "\0");
+		return -1;
 	}
 
 	// Perform a DNS lookup and get IP address
 	//server = gethostbyname("net-night.com");
 	server = gethostbyname(server_name);
 	if (server == NULL) {
-		exit(0);
+		// Error handling goes here
+		fprintf(stderr, "\tjson_get() -- gethostbyname(\"%s\")\n", server_name);
+		fprintf(stderr, "\t\tError!!!\n");
+		strcpy(json_response_text, "\0");
+		return -1;
 	}
 
 	/********** connect to the server **********/
@@ -49,6 +57,10 @@ void json_get(const char *server_name, const char *url, char *json_response_text
 	if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) 
 	{
 		// Error handling goes here
+		//fprintf(stderr, "\tjson_get() -- connect(\"%s\")\n", server_name);
+		//fprintf(stderr, "\t\tError!!!\n");
+		strcpy(json_response_text, "\0");
+		return -1;
 	}
 
 	// Send user input to server
@@ -59,6 +71,12 @@ void json_get(const char *server_name, const char *url, char *json_response_text
 	if (err_code < 0)
 	{
 		// Error handling goes here
+		fprintf(stderr, "\tjson_get() -- write()\n");
+		fprintf(stderr, "\t\tError!!!\n");
+		fprintf(stderr, "\t\terr_code: %u\n", err_code);
+		fprintf(stderr, "\t\tmessage: %s\n", message);
+		strcpy(json_response_text, "\0");
+		return -1;
 	}
 
 	// Read response from server
@@ -67,10 +85,19 @@ void json_get(const char *server_name, const char *url, char *json_response_text
 	if (err_code < 0) 
 	{
 		// Error handling goes here
+		fprintf(stderr, "\tjson_get() -- read()\n");
+		fprintf(stderr, "\t\tError!!!\n");
+		fprintf(stderr, "\t\terr_code: %u\n", err_code);
+		fprintf(stderr, "\t\tjson_response_text: %s\n", json_response_text);
+		strcpy(json_response_text, "\0");
+		return -1;
 	}
 
 	// Clean up
+	//fprintf(stderr, "\tjson_get() -- close()\n");
 	close(sockfd);
+	
+	return 0;
 }
 
 

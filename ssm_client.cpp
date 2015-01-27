@@ -170,6 +170,7 @@ void delete_downloaded_files()
 		{
 			// Something went wrong with the child process
 		}
+		fprintf(stdout, "Deleting existing photos - DONE!\n");
 	}
 }
 
