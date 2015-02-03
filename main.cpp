@@ -58,6 +58,11 @@ int main (int argc, char *argv[])
 				case 's':
 					// Parse server name (or IP address) from command line
 					server_name = optarg;
+					if(!verify_ssm_server_address(optarg)) 
+					{
+						fprintf(stdout, "Unable to connect to server %s\n", optarg);
+						exit(1);
+					}
 					break;
 
 				case '?':

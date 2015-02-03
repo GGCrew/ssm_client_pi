@@ -22,6 +22,7 @@
 
 
 char * scan_for_ssm_server();
+bool verify_ssm_server_address(const char *server_address);
 
 
 /**/

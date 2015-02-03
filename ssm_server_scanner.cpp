@@ -15,6 +15,8 @@
 void get_local_ip_address(char *ip_address);
 void scan_network_for_ssm_server(const char *client_ip_address, char *server_ip_address);
 void scan_local_network_for_ssm_server(char *server_ip_address);
+void scan_for_ssm_server_from_data_file(char *server_ip_address);
+void record_server_address(const char *server_ip_address);
 
 
 /**/
@@ -27,10 +29,143 @@ char * scan_for_ssm_server()
 
 	/**/
 
-	scan_local_network_for_ssm_server(server_ip_address);
-	//fprintf(stderr, "\tscan_local_network_for_ssm_server(server_ip_address): %s\n", server_ip_address);
+	bzero((char *) &server_ip_address, sizeof(server_ip_address)); // wipe it clean!
+
+	scan_for_ssm_server_from_data_file(server_ip_address);
+	if(strcmp(server_ip_address, "") == 0)
+		scan_local_network_for_ssm_server(server_ip_address);
+
+	//fprintf(stderr, "\tserver_ip_address: %s\n", server_ip_address);
 
 	return server_ip_address;
+}
+
+
+void scan_for_ssm_server_from_data_file(char *server_ip_address)
+{
+	// Save the server address in a local .file
+	char address[256];
+	char temp[256];
+
+	FILE *file;
+
+	int counter;
+
+	bool server_found;
+
+	/**/
+
+	// Load the rest of the addresses from the file
+	file = fopen(".ssm_client", "r");
+	if(file != NULL)
+	{
+		server_found = false;
+		for(counter = 0; ((counter < 10) && (!server_found)); counter++)
+		{
+			if(fgets(temp, 256, file) != NULL)
+			{
+				if(sscanf(temp, "%s", address) > 0)
+					if(strcmp(address, "") != 0)	// Skip blank lines in data file
+						server_found = verify_ssm_server_address(address);
+			}
+		}
+		fclose(file);
+
+		if(server_found)
+			strncpy(server_ip_address, address, 256);
+	}
+}
+
+
+bool verify_ssm_server_address(const char *server_address)
+{
+	// Check if server address really is the SSM server
+	// and record the address in a local file for future use
+
+	char json_response_text[512];
+	char message_type[512];
+
+	int errno;
+
+	/**/
+
+	fprintf(stderr, "\tScanning IP Address: %s...\n", server_address);
+	errno = json_get(server_address, "/controls/state.json", json_response_text);
+	if(errno >= 0)
+	{
+		fprintf(stderr, "\t\tHit -- Checking response...\n");
+		//{"message_type":"control","play_state":"play"}
+		json_parse_string_from_json(json_response_text, "message_type", message_type);
+		if(strcmp(message_type, "control") == 0)
+		{
+			fprintf(stderr, "\t\tResponse from %s is valid!\n", server_address);
+			record_server_address(server_address);
+			return true;
+		}
+	}
+	return false;
+}
+
+
+void record_server_address(const char *server_ip_address)
+{
+	// Save the server address in a local .file
+	char addresses[10][256];
+	char temp[256];
+
+	FILE *file;
+
+	int counter;
+
+	/**/
+
+	bzero((char *) &addresses, sizeof(addresses)); // wipe it clean!
+
+	// Add current address to top of the list
+	strncpy(addresses[0], server_ip_address, 256);
+
+	// Load the rest of the addresses from the file
+	file = fopen(".ssm_client", "r");
+	if(file != NULL)
+	{
+		for(counter = 1; counter < 10; counter++)
+		{
+			if(fgets(temp, 256, file) != NULL)
+			{
+				if(sscanf(temp, "%s", addresses[counter]) > 0)
+				{
+					// prevent duplicate entries in data file
+					if(strcmp(addresses[counter], server_ip_address) == 0)
+					{
+						bzero((char *) &addresses[counter], sizeof(addresses[counter])); // wipe it clean!
+
+						// shouldn't ever adjust a for-loop variable this way!
+						counter--;
+					}
+				}
+				else
+				{
+					// Skip blank lines in data file
+					// shouldn't ever adjust a for-loop variable this way!
+					counter--;
+				}
+			}
+		}
+		fclose(file);
+	}
+
+	// Write updated list to the file
+	file = fopen(".ssm_client", "w");
+	if(file != NULL)
+	{
+		for(counter = 0; counter < 10; counter++)
+		{
+			//	writeln(addresses[counter]);
+			if(strcmp(addresses[counter], "") != 0)	// Skip blank entries
+				fprintf(file, "%s\n", addresses[counter]);
+		}
+		fclose(file);
+	}
 }
 
 
@@ -79,12 +214,9 @@ void scan_network_for_ssm_server(const char *client_ip_address, char *server_ip_
 {
 	char local_ip_address[256];
 	char scan_ip_address[256];
-	char json_response_text[512];
-	char message_type[512];
 	char *ip[4];
 
 	int counter;
-	int errno;
 	int ip_value;
 
 	bool server_found;
@@ -112,22 +244,30 @@ void scan_network_for_ssm_server(const char *client_ip_address, char *server_ip_
 	{
 		snprintf(ip[3], sizeof(ip[3]), "%d", counter);
 		snprintf(scan_ip_address, sizeof(scan_ip_address), "%s.%s.%s.%s", ip[0], ip[1], ip[2], ip[3]);
-		fprintf(stderr, "\tScanning IP Address: %s...\n", scan_ip_address);
-		errno = json_get(scan_ip_address, "/controls/state.json", json_response_text);
-		if(errno >= 0)
+		server_found = verify_ssm_server_address(scan_ip_address);
+		if(server_found)
 		{
-			fprintf(stderr, "\t\tHit -- Checking response...\n");
-			//{"message_type":"control","play_state":"play"}
-			json_parse_string_from_json(json_response_text, "message_type", message_type);
-			if(strcmp(message_type, "control") == 0)
-			{
-				fprintf(stderr, "\t\tResponse from %s is valid!\n", scan_ip_address);
-				//snprintf(server_ip_address, sizeof(server_ip_address), "%s", scan_ip_address);
-				sprintf(server_ip_address, "%s", scan_ip_address);
-				server_found = true;
-				break;
-			}
+			sprintf(server_ip_address, "%s", scan_ip_address);
+			break;
 		}
+//		fprintf(stderr, "\tScanning IP Address: %s...\n", scan_ip_address);
+//		errno = json_get(scan_ip_address, "/controls/state.json", json_response_text);
+//		if(errno >= 0)
+//		{
+//			server_found = verify_ssm_server_address(char *server_address);
+//			if(server_found) { break; }
+//			fprintf(stderr, "\t\tHit -- Checking response...\n");
+//			//{"message_type":"control","play_state":"play"}
+//			json_parse_string_from_json(json_response_text, "message_type", message_type);
+//			if(strcmp(message_type, "control") == 0)
+//			{
+//				fprintf(stderr, "\t\tResponse from %s is valid!\n", scan_ip_address);
+//				//snprintf(server_ip_address, sizeof(server_ip_address), "%s", scan_ip_address);
+//				sprintf(server_ip_address, "%s", scan_ip_address);
+//				server_found = true;
+//				break;
+//			}
+//		}
 	}
 
 	if(!server_found)
@@ -138,21 +278,11 @@ void scan_network_for_ssm_server(const char *client_ip_address, char *server_ip_
 		{
 			snprintf(ip[3], sizeof(ip[3]), "%d", counter);
 			snprintf(scan_ip_address, sizeof(scan_ip_address), "%s.%s.%s.%s", ip[0], ip[1], ip[2], ip[3]);
-			fprintf(stderr, "\tScanning IP Address: %s...\n", scan_ip_address);
-			errno = json_get(scan_ip_address, "/controls/state.json", json_response_text);
-			if(errno >= 0)
+			server_found = verify_ssm_server_address(scan_ip_address);
+			if(server_found)
 			{
-				fprintf(stderr, "\t\tHit -- Checking response...\n");
-				//{"message_type":"control","play_state":"play"}
-				json_parse_string_from_json(json_response_text, "message_type", message_type);
-				if(strcmp(message_type, "control") == 0)
-				{
-					fprintf(stderr, "\t\tResponse from %s is valid!\n", scan_ip_address);
-					//snprintf(server_ip_address, sizeof(server_ip_address), "%s", scan_ip_address);
-					sprintf(server_ip_address, "%s", scan_ip_address);
-					server_found = true;
-					break;
-				}
+				sprintf(server_ip_address, "%s", scan_ip_address);
+				break;		
 			}
 		}
 	}
