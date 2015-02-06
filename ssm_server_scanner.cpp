@@ -95,7 +95,8 @@ void scan_for_ssm_server_from_data_file(char *server_ip_address)
 			if(strcmp(addresses[counter], "") != 0)	// Skip empty values
 			{
 				server_found = verify_ssm_server_address(addresses[counter]);
-				strncpy(server_ip_address, addresses[counter], 256);
+				if(server_found)
+					strncpy(server_ip_address, addresses[counter], 256);
 			}
 		}
 	}
