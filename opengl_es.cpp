@@ -55,7 +55,7 @@ void egl_init(EGL_TYPE *egl)
 	EGLConfig config;
 
 	/**/
-	
+
 	bcm_host_init();  // required for any RPi graphics tasks
 
 
@@ -235,7 +235,7 @@ void egl_render(EGL_TYPE *egl)
 	// Activate texture 0 (for later binding) and tell GLSL to use texture 0
 	glActiveTexture(GL_TEXTURE0); check();
 	glUniform1i(egl->unif_texture, 0); check();
-	
+
 	glUniformMatrix4fv(egl->unif_Pmatrix, 1, false, egl->projectionMatrix); check();
 	glUniformMatrix4fv(egl->unif_Vmatrix, 1, false, egl->viewMatrix); check();
 
@@ -246,7 +246,7 @@ void egl_render(EGL_TYPE *egl)
 		case TRANSITION_COMPLETE:
 			//egl_render_current(egl);
 			break;
-			
+
 		case TRANSITION:
 			egl_render_transition(egl);
 			break;
@@ -321,6 +321,8 @@ void egl_load_texture(TEXTURE_TYPE* texture, char filename[])
 	SDL_Surface* image;
 
 	/**/
+
+	// To-do: error handling if filename doesn't exist or isn't a valid image!
 
 	// OpenGL prep work to store texture data
 

@@ -6,6 +6,13 @@
 
 #include "ssm_server_scanner.h"
 #include "json.h"
+#include "os_settings.h"
+
+
+/**/
+
+
+#define GET_SERVER_HISTORY_PATH(filename) sprintf(filename, "%s%s", LOCALSTATEDIR, "/snapshowmagic/server_history")
 
 
 /**/
@@ -43,9 +50,9 @@ char * scan_for_ssm_server()
 
 void scan_for_ssm_server_from_data_file(char *server_ip_address)
 {
-	// Save the server address in a local .file
-	char address[256];
+	char addresses[10][256];
 	char temp[256];
+	char filename[512];
 
 	FILE *file;
 
@@ -55,24 +62,39 @@ void scan_for_ssm_server_from_data_file(char *server_ip_address)
 
 	/**/
 
-	// Load the rest of the addresses from the file
-	file = fopen(".ssm_client", "r");
+	GET_SERVER_HISTORY_PATH(filename);
+
+	file = fopen(filename, "r");
 	if(file != NULL)
 	{
-		server_found = false;
-		for(counter = 0; ((counter < 10) && (!server_found)); counter++)
+		bzero((char *) &addresses, sizeof(addresses)); // wipe it clean!
+
+		// Get in, read the data, and get out!
+		for(counter = 0; counter < 10; counter++)
 		{
 			if(fgets(temp, 256, file) != NULL)
 			{
-				if(sscanf(temp, "%s", address) > 0)
-					if(strcmp(address, "") != 0)	// Skip blank lines in data file
-						server_found = verify_ssm_server_address(address);
+				/*
+				if(sscanf(temp, "%s", addresses[counter]) > 0)
+					if(strcmp(addresses[counter], "") == 0)	// Skip blank lines in data file
+						counter--;
+				*/
+				sscanf(temp, "%s", addresses[counter]);
 			}
 		}
 		fclose(file);
 
-		if(server_found)
-			strncpy(server_ip_address, address, 256);
+		// Now let's check the addresses.
+		// Breaking this into a separate loop because verify_ssm_server_address() writes to the file we just read from.  Trying to avoid a "file is locked" error from the file system.
+		server_found = false;
+		for(counter = 0; ((counter < 10) && (!server_found)); counter++)
+		{
+			if(strcmp(addresses[counter], "") != 0)	// Skip empty values
+			{
+				server_found = verify_ssm_server_address(addresses[counter]);
+				strncpy(server_ip_address, addresses[counter], 256);
+			}
+		}
 	}
 }
 
@@ -89,16 +111,16 @@ bool verify_ssm_server_address(const char *server_address)
 
 	/**/
 
-	fprintf(stderr, "\tScanning IP Address: %s...\n", server_address);
+	fprintf(stdout, "\tScanning IP Address: %s...\n", server_address);
 	errno = json_get(server_address, "/controls/state.json", json_response_text);
 	if(errno >= 0)
 	{
-		fprintf(stderr, "\t\tHit -- Checking response...\n");
+		fprintf(stdout, "\t\tHit -- Checking response...\n");
 		//{"message_type":"control","play_state":"play"}
 		json_parse_string_from_json(json_response_text, "message_type", message_type);
 		if(strcmp(message_type, "control") == 0)
 		{
-			fprintf(stderr, "\t\tResponse from %s is valid!\n", server_address);
+			fprintf(stdout, "\t\tResponse from %s is valid!\n", server_address);
 			record_server_address(server_address);
 			return true;
 		}
@@ -109,9 +131,10 @@ bool verify_ssm_server_address(const char *server_address)
 
 void record_server_address(const char *server_ip_address)
 {
-	// Save the server address in a local .file
+	// Save the server address in a local file
 	char addresses[10][256];
 	char temp[256];
+	char filename[512];
 
 	FILE *file;
 
@@ -119,13 +142,15 @@ void record_server_address(const char *server_ip_address)
 
 	/**/
 
+	GET_SERVER_HISTORY_PATH(filename);
+
 	bzero((char *) &addresses, sizeof(addresses)); // wipe it clean!
 
 	// Add current address to top of the list
 	strncpy(addresses[0], server_ip_address, 256);
 
 	// Load the rest of the addresses from the file
-	file = fopen(".ssm_client", "r");
+	file = fopen(filename, "r");
 	if(file != NULL)
 	{
 		for(counter = 1; counter < 10; counter++)
@@ -155,7 +180,7 @@ void record_server_address(const char *server_ip_address)
 	}
 
 	// Write updated list to the file
-	file = fopen(".ssm_client", "w");
+	file = fopen(filename, "w");
 	if(file != NULL)
 	{
 		for(counter = 0; counter < 10; counter++)

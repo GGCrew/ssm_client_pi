@@ -46,7 +46,8 @@ void get_next_photo(EGL_TYPE *egl, const char *server_name)
 	transition_duration = json_parse_int_from_json(json_response_text, "transition_duration");
 
 	if(full_path[0] == '\0')
-		strcpy(local_path, DEFAULT_IMAGE_PATH);  // Error handling
+		//strcpy(local_path, DEFAULT_IMAGE_PATH);  // Error handling
+		GET_DEFAULT_IMAGE_PATH(local_path);
 	else
 		download_file("http://", server_name, full_path, local_path);
 
@@ -89,18 +90,22 @@ void get_play_state(EGL_TYPE *egl, const char *server_name)
 void download_file(const char *protocol_prefix, const char *server_name, const char *server_path, char *local_path)
 {
 	char url[512];
+	char photos_path[512];
+	char directory_prefix[512 + 32];
 
 	pid_t pid;
 	int pid_status;
 
 	/**/
 
-	// Convert "full_path" from an absolute address to a local address
-	strcpy(local_path, ".");
+	GET_DOWNLOAD_PATH(photos_path);
+
+	// Convert "server_path" from an absolute address to a local path
+	strcpy(local_path, photos_path);
 	strcat(local_path, server_path);
 
-	// Check if local file path exists
-	if( access( local_path, F_OK ) != -1 )
+	// Check if local path exists
+	if(access(local_path, F_OK) != -1)
 	{
 		// local copy exists!  Nothing else to do.
 	}
@@ -117,7 +122,10 @@ void download_file(const char *protocol_prefix, const char *server_name, const c
 		{
 			// We're in the child process!
 			// Execute the command...
-			execl("/usr/bin/wget", "/usr/bin/wget", url, "--no-host-directories", "--force-directories", "--no-verbose", NULL);
+			strcpy(directory_prefix, "--directory-prefix=");
+			strcat(directory_prefix, photos_path);
+
+			execl("/usr/bin/wget", "/usr/bin/wget", "--no-host-directories", "--force-directories", "--no-verbose", directory_prefix, url, NULL);
 
 			// The following line will only run if the executed command fails.
 			_exit(EXIT_FAILURE);
@@ -144,16 +152,19 @@ void delete_downloaded_files()
 	pid_t pid;
 	int pid_status;
 
+	char photos_path[512];
+
 	/**/
-	
+
 	pid = fork();
 	if(pid == 0)
 	{
 		// We're in the child process!
 		// Execute the command...
-		//execl("/bin/rm", "/bin/rm", "--recursive", "--force", "--verbose", "./photos", NULL);
-		fprintf(stdout, "Deleting existing photos...\n");
-		execl("/bin/rm", "/bin/rm", "--recursive", "--force", "./photos", NULL);
+		GET_DOWNLOADED_PHOTOS_PATH(photos_path);
+
+		fprintf(stdout, "Deleting existing photos from %s...\n", photos_path);
+		execl("/bin/rm", "/bin/rm", "--recursive", "--force", photos_path, NULL);
 
 		// The following line will only run if the executed command fails.
 		_exit(EXIT_FAILURE);
@@ -161,6 +172,7 @@ void delete_downloaded_files()
 	else if(pid < 0)
 	{
 		// The fork() failed.
+		fprintf(stderr,	"delete_downloaded_files() -- fork() failure!!!\n");
 	}
 	else
 	{

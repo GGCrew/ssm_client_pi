@@ -19,6 +19,7 @@ int main (int argc, char *argv[])
 	bool terminate;
 
 	char *server_name = NULL;
+	char default_image_path[512];
 
 	struct timespec current_time;
 	struct timespec time_remaining;
@@ -110,8 +111,9 @@ int main (int argc, char *argv[])
 
 
 	// Load starting textures
+	GET_DEFAULT_IMAGE_PATH(default_image_path);
 	egl->textureCurrent = 0;
-	egl_load_texture(&egl->textures[egl->textureCurrent], DEFAULT_IMAGE_PATH);
+	egl_load_texture(&egl->textures[egl->textureCurrent], default_image_path);
 
 	get_next_photo(egl, server_name);
 
@@ -137,7 +139,7 @@ int main (int argc, char *argv[])
 				time_remaining.tv_sec = egl->hold_duration / 1000;
 				time_remaining.tv_nsec = (egl->hold_duration % 1000) * 1000000;
 
-				clock_addtimes(current_time, time_remaining, &hold_end_time);				
+				clock_addtimes(current_time, time_remaining, &hold_end_time);
 
 				egl->program_state = HOLD;
 				break;
@@ -146,16 +148,16 @@ int main (int argc, char *argv[])
 				// Assume we will sleep for 1 second (which is correct most of the time)
 				clock_gettime(CLOCK_REALTIME, &current_time);
 				clock_addtimes(current_time, (struct timespec){1, 0}, &sleep_end_time);
-				
+
 				switch(egl->play_state)
 				{
 					case PLAY:
 						clock_subtracttimes(hold_end_time, current_time, &time_remaining);
-						
+
 						if(time_remaining.tv_sec > 0)
 						{
 							// More than 1 second remains
-							// Check play_state from server	
+							// Check play_state from server
 							get_play_state(egl, server_name);
 						}
 						else
@@ -168,15 +170,15 @@ int main (int argc, char *argv[])
 							egl->program_state = TRANSITION;
 						}
 						break;
-						
+
 					case PAUSE:
 						// Ignore hold_end_time and continue displaying current image
 						get_play_state(egl, server_name);
 						break;
-						
+
 					case STOP:
 						// Ignore hold_end_time and blank the screen
-						egl_load_texture(&egl->textures[egl->textureCurrent], "./images/black.png");
+						egl_load_texture(&egl->textures[egl->textureCurrent], default_image_path);
 						egl_render(egl);
 						get_play_state(egl, server_name);
 						break;
