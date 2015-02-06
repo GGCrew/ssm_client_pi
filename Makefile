@@ -65,3 +65,11 @@ install : ssm_client
 
 	@echo Done!
 
+uninstall :
+	@echo Uninstalling the binary...
+	@rm -f $(bindir)/ssm_client
+
+	@echo Deleting data folders and files...
+	@rm -Rf "$(DATAFOLDER)"
+
+	@echo Done!
