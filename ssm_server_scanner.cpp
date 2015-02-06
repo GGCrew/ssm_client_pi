@@ -38,12 +38,15 @@ char * scan_for_ssm_server()
 
 	bzero((char *) &server_ip_address, sizeof(server_ip_address)); // wipe it clean!
 
+	fprintf(stdout, "server_ip_address: %s\n", server_ip_address);
 	scan_for_ssm_server_from_data_file(server_ip_address);
+	fprintf(stdout, "server_ip_address: %s\n", server_ip_address);
 	if(strcmp(server_ip_address, "") == 0)
 		scan_local_network_for_ssm_server(server_ip_address);
 
 	//fprintf(stderr, "\tserver_ip_address: %s\n", server_ip_address);
 
+	fprintf(stdout, "server_ip_address: %s\n", server_ip_address);
 	return server_ip_address;
 }
 
