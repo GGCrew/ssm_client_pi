@@ -41,7 +41,7 @@ ssm_client.o : ssm_client.cpp ssm_client.h json.h os_settings.h
 json.o : json.cpp json.h
 	$(CC) -c json.cpp $(INCLUDES)
 
-ssm_server_scanner.0 : ssm_server_scanner.cpp ssm_server_scanner.h json.h os_settings.h
+ssm_server_scanner.o : ssm_server_scanner.cpp ssm_server_scanner.h json.h os_settings.h
 	$(CC) -c ssm_server_scanner.cpp $(INCLUDES)
 
 clean : 
