@@ -7,7 +7,6 @@
 
 #include "opengl_es.h"
 #include "ssm_client.h"
-//#include "ssm_server_scanner.h"
 
 
 /**/
@@ -196,4 +195,3 @@ int main (int argc, char *argv[])
 
 	return 0;
 }
-
