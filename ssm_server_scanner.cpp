@@ -3,6 +3,7 @@
 #include <ifaddrs.h>
 #include <netinet/in.h>	//sockaddr_in, sockaddr_in6, INET_ADDRSTRLEN, INET6_ADDRSTRLEN
 #include <arpa/inet.h>	//inet_ntop()
+#include <unistd.h>	//sleep()
 
 #include "ssm_server_scanner.h"
 #include "json.h"
@@ -19,7 +20,6 @@
 
 
 // Declarations for private functions
-void get_local_ip_address(char *ip_address);
 void scan_network_for_ssm_server(const char *client_ip_address, char *server_ip_address);
 void scan_local_network_for_ssm_server(char *server_ip_address);
 void scan_for_ssm_server_from_data_file(char *server_ip_address);
@@ -29,20 +29,11 @@ void record_server_address(const char *server_ip_address);
 /**/
 
 
-char * scan_for_ssm_server()
+void scan_for_ssm_server(char *server_address)
 {
-	// Declaring as static so the data continues to exist outside of the function
-	static char server_ip_address[256];
-
-	/**/
-
-	bzero((char *) &server_ip_address, sizeof(server_ip_address)); // wipe it clean!
-
-	scan_for_ssm_server_from_data_file(server_ip_address);
-	if(strcmp(server_ip_address, "") == 0)
-		scan_local_network_for_ssm_server(server_ip_address);
-
-	return server_ip_address;
+	scan_for_ssm_server_from_data_file(server_address);
+	if(strcmp(server_address, "") == 0)
+		scan_local_network_for_ssm_server(server_address);
 }
 
 
@@ -86,7 +77,9 @@ void scan_for_ssm_server_from_data_file(char *server_ip_address)
 			{
 				server_found = verify_ssm_server_address(addresses[counter]);
 				if(server_found)
+				{
 					strncpy(server_ip_address, addresses[counter], 256);
+				}
 			}
 		}
 	}
@@ -194,6 +187,8 @@ void scan_local_network_for_ssm_server(char *server_ip_address)
 
 	/**/
 
+	bzero((char *) &machine_ip_address, sizeof(machine_ip_address)); // wipe it clean!
+
 	get_local_ip_address(machine_ip_address);
 	scan_network_for_ssm_server(machine_ip_address, server_ip_address);	
 }
@@ -203,6 +198,7 @@ void get_local_ip_address(char *ip_address)
 {
 	struct ifaddrs * ifAddrStruct=NULL;
 	struct ifaddrs * ifa=NULL;
+
 	void * tmpAddrPtr=NULL;
 
 	/**/
@@ -249,7 +245,6 @@ void scan_network_for_ssm_server(const char *client_ip_address, char *server_ip_
 	ip[1] = strtok(NULL, ".");
 	ip[2] = strtok(NULL, ".");
 	ip[3] = strtok(NULL, ".");
-	//fprintf(stderr, "\tParsed IP Address: %s.%s.%s.%s\n", ip[0], ip[1], ip[2], ip[3]);
 	
 	// optional: guess starting point based on ddd value (eg 104 implies addresses start at 100 instead of 1)
 	ip_value = atoi(ip[3]);
@@ -269,24 +264,6 @@ void scan_network_for_ssm_server(const char *client_ip_address, char *server_ip_
 			sprintf(server_ip_address, "%s", scan_ip_address);
 			break;
 		}
-//		fprintf(stderr, "\tScanning IP Address: %s...\n", scan_ip_address);
-//		errno = json_get(scan_ip_address, "/controls/state.json", json_response_text);
-//		if(errno >= 0)
-//		{
-//			server_found = verify_ssm_server_address(char *server_address);
-//			if(server_found) { break; }
-//			fprintf(stderr, "\t\tHit -- Checking response...\n");
-//			//{"message_type":"control","play_state":"play"}
-//			json_parse_string_from_json(json_response_text, "message_type", message_type);
-//			if(strcmp(message_type, "control") == 0)
-//			{
-//				fprintf(stderr, "\t\tResponse from %s is valid!\n", scan_ip_address);
-//				//snprintf(server_ip_address, sizeof(server_ip_address), "%s", scan_ip_address);
-//				sprintf(server_ip_address, "%s", scan_ip_address);
-//				server_found = true;
-//				break;
-//			}
-//		}
 	}
 
 	if(!server_found)

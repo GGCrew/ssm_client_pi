@@ -5,6 +5,7 @@
 #include <stdio.h> // printf()
 
 #include "ssm_client.h"
+#include "ssm_server_scanner.h"
 #include "json.h"
 
 
@@ -13,15 +14,78 @@
 
 // Declarations for private functions
 void download_file(const char *protocol_prefix, const char *server_name, const char *server_path, char *local_path);
-void delete_downloaded_files();
+bool delete_downloaded_files();
+bool init_network_connection();
 
 
 /**/
 
 
-void ssm_init()
+bool ssm_init(char *server_address)
 {
-	delete_downloaded_files();
+	bool success = false;	// Assume failure
+
+	/**/
+
+	success = init_network_connection();
+	if(!success)
+		fprintf(stdout, "Unable to initialize the network connection.\n");
+
+	if(success)
+	{
+		if(strcmp(server_address, "") == 0)
+			scan_for_ssm_server(server_address);
+	}
+
+	if(success)
+	{
+		success = verify_ssm_server_address(server_address);
+		if(!success)
+			fprintf(stdout, "Unable to connect to server %s\n", server_address);
+	}
+
+	if(success)
+	{
+		success = delete_downloaded_files();
+		if(!success)
+			fprintf(stdout, "Unable to delete existing photos.\n");
+	}
+	
+	return success;
+}
+
+
+bool init_network_connection()
+{
+	char local_ip_address[256];
+
+	bool local_ip_address_assigned = false;
+
+	int attempt = 0;
+	int max_attempts = 5;
+
+	/**/
+
+	// Check for valid IP address (which implies a working network connection)
+	bzero((char *) &local_ip_address, sizeof(local_ip_address)); // wipe it clean!
+
+	do
+	{
+		attempt++;
+		fprintf(stdout, "\tChecking for local IP address (attempt %u/%u)...\n", attempt, max_attempts);
+		get_local_ip_address(local_ip_address);
+		local_ip_address_assigned = (strcmp(local_ip_address, "") != 0);
+		if(!local_ip_address_assigned && (attempt < max_attempts))	// Skip sleeping if we're on last attempt.
+			sleep(5);
+	}
+	while(!local_ip_address_assigned && (attempt < max_attempts));
+
+	if(local_ip_address_assigned)
+	{
+		fprintf(stdout, "\tLocal IP address: %s\n", local_ip_address);
+	}
+
+	return local_ip_address_assigned;
 }
 
 
@@ -147,7 +211,7 @@ void download_file(const char *protocol_prefix, const char *server_name, const c
 }
 
 
-void delete_downloaded_files()
+bool delete_downloaded_files()
 {
 	pid_t pid;
 	int pid_status;
@@ -163,7 +227,7 @@ void delete_downloaded_files()
 		// Execute the command...
 		GET_DOWNLOADED_PHOTOS_PATH(photos_path);
 
-		fprintf(stdout, "Deleting existing photos from %s...\n", photos_path);
+		fprintf(stdout, "\tDeleting existing photos from %s...\n", photos_path);
 		execl("/bin/rm", "/bin/rm", "--recursive", "--force", photos_path, NULL);
 
 		// The following line will only run if the executed command fails.
@@ -172,7 +236,7 @@ void delete_downloaded_files()
 	else if(pid < 0)
 	{
 		// The fork() failed.
-		fprintf(stderr,	"delete_downloaded_files() -- fork() failure!!!\n");
+		fprintf(stderr,	"\tdelete_downloaded_files() -- fork() failure!!!\n");
 	}
 	else
 	{
@@ -182,8 +246,10 @@ void delete_downloaded_files()
 		{
 			// Something went wrong with the child process
 		}
-		fprintf(stdout, "Deleting existing photos - DONE!\n");
+		fprintf(stdout, "\tDeleting existing photos - DONE!\n");
 	}
+
+	return true;
 }
 
 

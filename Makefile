@@ -4,6 +4,11 @@ bindir=$(exec_prefix)/bin
 #datarootdir=$(prefix)/share
 localstatedir=$(prefix)/var
 
+DATAFOLDER=$(localstatedir)/snapshowmagic
+IMAGESFOLDER=$(DATAFOLDER)/images
+DOWNLOADSFOLDER=$(DATAFOLDER)/downloads
+SERVERHISTORY=$(DATAFOLDER)/server_history
+
 
 #..#
 
@@ -17,25 +22,19 @@ LDFLAGS=-L/opt/vc/lib -lbcm_host -lGLESv2 -lEGL -lSDL_image -ljson -lrt
 OBJECTFILES=main.o opengl_es.o ssm_client.o json.o ssm_server_scanner.o
 
 
-DATAFOLDER=$(localstatedir)/snapshowmagic
-IMAGESFOLDER=$(DATAFOLDER)/images
-DOWNLOADSFOLDER=$(DATAFOLDER)/downloads
-SERVERHISTORY=$(DATAFOLDER)/server_history
-
-
 #..#
 
 
 ssm_client: $(OBJECTFILES)
 	$(CC) -g -o ssm_client $(OBJECTFILES) $(INCLUDES) $(LDFLAGS) $(CFLAGS)
 
-main.o : main.cpp opengl_es.h ssm_client.h ssm_server_scanner.h
+main.o : main.cpp opengl_es.h ssm_client.h
 	$(CC) -c main.cpp $(INCLUDES) -lbcm_host -lSDL_image $(CFLAGS)
 
 opengl_es.o : opengl_es.cpp opengl_es.h
 	$(CC) -c opengl_es.cpp $(INCLUDES) -lSDL_image `sdl-config --libs --cflags`
 
-ssm_client.o : ssm_client.cpp ssm_client.h json.h os_settings.h
+ssm_client.o : ssm_client.cpp ssm_client.h json.h os_settings.h ssm_server_scanner.h
 	$(CC) -c ssm_client.cpp $(INCLUDES)
 
 json.o : json.cpp json.h

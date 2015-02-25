@@ -25,7 +25,7 @@
 /**/
 
 
-void ssm_init();
+bool ssm_init(char *server_address);
 
 void get_next_photo(EGL_TYPE *egl, const char *server_name);
 void get_play_state(EGL_TYPE *egl, const char *server_name);

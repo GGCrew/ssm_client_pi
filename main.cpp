@@ -7,7 +7,7 @@
 
 #include "opengl_es.h"
 #include "ssm_client.h"
-#include "ssm_server_scanner.h"
+//#include "ssm_server_scanner.h"
 
 
 /**/
@@ -18,7 +18,7 @@ int main (int argc, char *argv[])
 	EGL_TYPE _egl, *egl=&_egl;
 	bool terminate;
 
-	char *server_name = NULL;
+	char server_name[256];
 	char default_image_path[512];
 
 	struct timespec current_time;
@@ -29,78 +29,59 @@ int main (int argc, char *argv[])
 
 	/**/
 
+	bzero((char *) &server_name, sizeof(server_name)); // wipe it clean!
 
-	if(argc == 1)
+
+	// Parse command line options
+	int option_character;
+	while ((option_character = getopt(argc, argv, "ghs:")) != -1)
 	{
-		// Automatically find the SSM Server by scanning the network
-		server_name = scan_for_ssm_server();
-	}
-	else
-	{
-		// Parse command line options
-		int option_character;
-		while ((option_character = getopt(argc, argv, "ghs:")) != -1)
+		switch(option_character)
 		{
-			switch(option_character)
-			{
-				case 'g':
-					// Automatically find the SSM Server by scanning the network
-					server_name = scan_for_ssm_server();
-					break;
+			case 'g':
+				// Automatically find the SSM Server by scanning the network
+				break;
 
-				case 'h':
-					// Help options
-					fprintf(stdout, " -g\tGuess the server's IP address by scanning the local network\n");
-					fprintf(stdout, " -s\tSpecify the server's IP address (-s 123.456.78.9)\n");
-					fprintf(stdout, "\n\n");
-					return 0;
-					break;
+			case 'h':
+				// Help options
+				fprintf(stdout, " -g\tGuess the server's IP address by scanning the local network\n");
+				fprintf(stdout, " -s\tSpecify the server's IP address (-s 123.456.78.9)\n");
+				fprintf(stdout, "\n\n");
+				return 0;
+				break;
 
-				case 's':
-					// Parse server name (or IP address) from command line
-					server_name = optarg;
-					if(!verify_ssm_server_address(optarg)) 
-					{
-						fprintf(stdout, "Unable to connect to server %s\n", optarg);
-						exit(1);
-					}
-					break;
+			case 's':
+				// Parse server name (or IP address) from command line
+				sprintf(server_name, "%s", optarg);
+				break;
 
-				case '?':
-					switch(optopt)
-					{
-						case 's':
-							fprintf(stderr, "Option -%c requires an argument.\n", optopt);
-							break;
+			case '?':
+				switch(optopt)
+				{
+					case 's':
+						fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+						break;
 
-						default:
-							if(isprint(optopt))
-								fprintf(stderr, "Unknown option `-%c'.\n", optopt);
-							else
-								fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
-							break;
-					}
-					return 1;
+					default:
+						if(isprint(optopt))
+							fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+						else
+							fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
+						break;
+				}
+				return 1;
 
-				default:
-					abort();
-			}
+			default:
+				abort();
 		}
 	}
-
-	// Check that required parameters are set
-	if(!server_name)
-	{
-		fprintf(stderr, "Unable to parse or find the SSM server.\n");
-		return 1;
-	}
-	//fprintf(stderr, "server_name: %s\n", server_name);
 
 
 	/**/
 
 
-	ssm_init();
+	if(!ssm_init(server_name))
+		return 1;
 
 
 	// Start OGLES
@@ -111,6 +92,7 @@ int main (int argc, char *argv[])
 
 
 	// Load starting textures
+	fprintf(stdout, "Loading starting textures...\n");
 	GET_DEFAULT_IMAGE_PATH(default_image_path);
 	egl->textureCurrent = 0;
 	egl_load_texture(&egl->textures[egl->textureCurrent], default_image_path);
