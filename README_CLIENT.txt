@@ -64,6 +64,17 @@ sudo vim /etc/init.d/ssm_client
 	#! /bin/sh
 	# /etc/init.d/ssm_client
 
+	### BEGIN INIT INFO
+	# Provides:          ssm_client
+	# Required-Start:    $local_fs
+	# Required-Stop:     $local_fs
+	# Default-Start:     2 3 4 5
+	# Default-Stop:      0 1 6
+	# Short-Description: SnapShowMagic client
+	# Description:       Connects to a Snap Show Magic server,
+	#                    and displays pictures as directed by the server.
+	### END INIT INFO
+
 	# The following part always gets executed.
 	#echo "This part always gets executed"
 
