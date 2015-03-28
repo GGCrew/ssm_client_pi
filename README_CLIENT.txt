@@ -59,7 +59,6 @@ sudo vim /etc/wpa_supplicant/wpa_supplicant.conf
 sudo ifdown wlan0 && sudo ifup wlan0
 
 
-
 sudo vim /etc/init.d/ssm_client
 	#! /bin/sh
 	# /etc/init.d/ssm_client
@@ -98,6 +97,9 @@ sudo vim /etc/init.d/ssm_client
 	exit 0
 sudo chmod a+x /etc/init.d/ssm_client
 sudo update-rc.d ssm_client defaults
+
+
+sudo tune2fs -c 2 /dev/root
 
 
 
