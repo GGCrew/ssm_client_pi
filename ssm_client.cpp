@@ -98,6 +98,8 @@ void get_next_photo(EGL_TYPE *egl, const char *server_name)
 
 	int hold_duration;
 	int transition_duration;
+	int color_mode;
+	bool vignette;
 
 	int textureIndex;
 
@@ -108,6 +110,8 @@ void get_next_photo(EGL_TYPE *egl, const char *server_name)
 	json_parse_string_from_json(json_response_text, "transition_type", transition_type);
 	hold_duration = json_parse_int_from_json(json_response_text, "hold_duration");
 	transition_duration = json_parse_int_from_json(json_response_text, "transition_duration");
+	color_mode = json_parse_int_from_json(json_response_text, "color_mode");
+	vignette = json_parse_bool_from_json(json_response_text, "effect_vignette");
 
 	if(full_path[0] == '\0')
 		//strcpy(local_path, DEFAULT_IMAGE_PATH);  // Error handling
@@ -129,6 +133,16 @@ void get_next_photo(EGL_TYPE *egl, const char *server_name)
 
 	egl_load_texture(&egl->textures[textureIndex], local_path);
 //	egl->hold_durations[textureIndex] = hold_duration;
+
+	if(color_mode > 0)
+		egl->textures[textureIndex].color_mode = color_mode;
+	else
+		egl->textures[textureIndex].color_mode = EGL_DEFAULT_COLOR_MODE;
+
+	if(vignette)
+		egl->textures[textureIndex].vignette = vignette;
+	else
+		egl->textures[textureIndex].vignette = EGL_DEFAULT_VIGNETTE;
 }
 
 

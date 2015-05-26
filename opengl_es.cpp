@@ -140,12 +140,40 @@ void egl_init_shaders(EGL_TYPE *egl)
 		"}";
 
    const GLchar *fshader_source =
+		"const mediump int COLOR_MODE_NORMAL = 0;"
+		"const mediump int COLOR_MODE_GRAYSCALE = 1;"
+		"const mediump int COLOR_MODE_SEPIA = 2;"
+		"const mediump float RADIUS = 0.7;"
+		"const mediump float SOFTNESS = 0.45;"
 		"precision mediump float;"  // Specify math precision level.
 		"uniform sampler2D texture;" // The texture.
 		"uniform float alpha;"
+		"uniform int color_mode;" // The GLSL color_mode to apply to the texture (if any).
+		"uniform bool vignette;"
+		"uniform vec2 resolution;"
+		"uniform vec2 texture_resolution;"
 		"varying vec2 vUV;" // Get the pixel coordinates from the vertex shader vUV variable.
 		"void main(void) {"
 		" vec4 pixel = texture2D(texture, vUV);"
+		" if(color_mode == COLOR_MODE_GRAYSCALE) {"
+		"  pixel = vec4(vec3(dot(pixel.rgb, vec3(0.299, 0.587, 0.114))), pixel.a);" // Grayscale
+		" }"
+		" if(color_mode == COLOR_MODE_SEPIA) {"
+		"  pixel = vec4(vec3(dot(pixel.rgb, vec3(0.299, 0.587, 0.114))), pixel.a);"	// Grayscale
+		"  pixel = vec4(pixel.rgb * vec3(1.2, 1.0, 0.8), pixel.a);" // Sepia
+		" }"
+		" if(vignette) {"
+		"  vec2 position = (gl_FragCoord.xy / texture_resolution.xy) - vec2(0.5, 0.5);"	// Determine center point of texture
+		   // Reposition the center point based on difference between texture and screen resolutions
+		"  position.x = position.x - ( ( (resolution.x - texture_resolution.x) / texture_resolution.x) / 2.0);"
+		"  position.y = position.y - ( ( (resolution.y - texture_resolution.y) / texture_resolution.y) / 2.0);"
+		   // Calculate vignette
+		"  float len = length(position);"
+		"  float vignetting = smoothstep(RADIUS, RADIUS - SOFTNESS, len);"
+		   // Apply vignette
+		"  pixel.rgb = mix(pixel.rgb, pixel.rgb * vignetting, 1.0);"
+		" }else{"
+		" }"
 		" gl_FragColor = vec4(pixel.rgb, alpha);"
 		"}";
 
@@ -209,12 +237,16 @@ void egl_init_model(EGL_TYPE *egl)
 
 
 	// Link GLSL uniform variables
-	egl->unif_Pmatrix = glGetUniformLocation(egl->shaderProgram, "Pmatrix");
-	egl->unif_Vmatrix = glGetUniformLocation(egl->shaderProgram, "Vmatrix");
-	egl->unif_Mmatrix = glGetUniformLocation(egl->shaderProgram, "Mmatrix");
-	egl->unif_Smatrix = glGetUniformLocation(egl->shaderProgram, "Smatrix");
-	egl->unif_texture = glGetUniformLocation(egl->shaderProgram, "texture"); check();
-	egl->unif_alpha   = glGetUniformLocation(egl->shaderProgram, "alpha"); check();
+	egl->unif_Pmatrix							= glGetUniformLocation(egl->shaderProgram, "Pmatrix");
+	egl->unif_Vmatrix							= glGetUniformLocation(egl->shaderProgram, "Vmatrix");
+	egl->unif_Mmatrix							= glGetUniformLocation(egl->shaderProgram, "Mmatrix");
+	egl->unif_Smatrix							= glGetUniformLocation(egl->shaderProgram, "Smatrix");
+	egl->unif_texture							= glGetUniformLocation(egl->shaderProgram, "texture");						check();
+	egl->unif_alpha								= glGetUniformLocation(egl->shaderProgram, "alpha");							check();
+	egl->unif_color_mode					= glGetUniformLocation(egl->shaderProgram, "color_mode"); 				check();
+	egl->unif_vignette						= glGetUniformLocation(egl->shaderProgram, "vignette");						check();
+	egl->unif_resolution					= glGetUniformLocation(egl->shaderProgram, "resolution");					check();
+	egl->unif_texture_resolution	= glGetUniformLocation(egl->shaderProgram, "texture_resolution");	check();
 }
 
 
@@ -309,10 +341,10 @@ void scale_matrix(GLfloat matrix[], long screenWidth, long screenHeight, long te
 		xRatio = 1.0f;
 	}
 
-	matrix[0]=xRatio;	matrix[1]=0;		matrix[2]=0;  matrix[3]=0;
+	matrix[0]=xRatio;	matrix[1]=0;			matrix[2]=0;  matrix[3]=0;
 	matrix[4]=0;  		matrix[5]=yRatio;	matrix[6]=0;  matrix[7]=0;
-	matrix[8]=0;		matrix[9]=0;		matrix[10]=1; matrix[11]=0;
-	matrix[12]=0;		matrix[13]=0;		matrix[14]=0; matrix[15]=1;
+	matrix[8]=0;			matrix[9]=0;			matrix[10]=1; matrix[11]=0;
+	matrix[12]=0;			matrix[13]=0;			matrix[14]=0; matrix[15]=1;
 }
 
 
@@ -384,6 +416,8 @@ void egl_unload_texture(TEXTURE_TYPE* texture)
 
 void egl_render_current(EGL_TYPE *egl)
 {
+	GLfloat texture_resolution[2];
+
 	scale_matrix(egl->scalingMatrix, egl->screen_width, egl->screen_height, egl->textures[egl->textureCurrent].width, egl->textures[egl->textureCurrent].height);
 	glUniformMatrix4fv(egl->unif_Smatrix, 1, false, egl->scalingMatrix);
 
@@ -393,6 +427,26 @@ void egl_render_current(EGL_TYPE *egl)
 
 	// Bind the current texture to the active GL texture (should be GL_TEXTURE0)
 	glBindTexture(GL_TEXTURE_2D, egl->textures[egl->textureCurrent].glTextureID); check();
+
+	// Specify GLSL color_mode (if any)
+	glUniform1i(egl->unif_color_mode, egl->textures[egl->textureCurrent].color_mode); check();
+
+	// Specify GLSL vignette (if any)
+	glUniform1i(egl->unif_vignette, egl->textures[egl->textureCurrent].vignette);
+
+	// Specify resolutions
+	GLfloat screen_resolution[] = {egl->screen_width, egl->screen_height};
+	GLfloat ratioW = egl->screen_width / egl->textures[egl->textureCurrent].width;
+	GLfloat ratioH = egl->screen_height / egl->textures[egl->textureCurrent].height;
+	if(ratioW < ratioH) {
+		texture_resolution[0] = egl->textures[egl->textureCurrent].width * ratioW;
+		texture_resolution[1] = egl->textures[egl->textureCurrent].height * ratioW;
+	} else {
+		texture_resolution[0] = egl->textures[egl->textureCurrent].width * ratioH;
+		texture_resolution[1] = egl->textures[egl->textureCurrent].height * ratioH;
+	}
+	glUniform2fv(egl->unif_resolution, 1, screen_resolution);
+	glUniform2fv(egl->unif_texture_resolution, 1, texture_resolution);
 
 	glDisable(GL_BLEND); check();
 
@@ -410,6 +464,7 @@ void egl_render_transition(EGL_TYPE *egl)
 	int transitionDuration;
 
 	GLfloat alpha;
+	GLfloat texture_resolution[2];
 
 	/**/
 
@@ -448,6 +503,26 @@ void egl_render_transition(EGL_TYPE *egl)
 
 			// Bind the current texture to the active GL texture (should be GL_TEXTURE0)
 			glBindTexture(GL_TEXTURE_2D, egl->textures[textureCounter].glTextureID); check();
+
+			// Specify GLSL color_mode (if any)
+			glUniform1i(egl->unif_color_mode, egl->textures[textureCounter].color_mode); check();
+
+			// Specify GLSL vignette (if any)
+			glUniform1i(egl->unif_vignette, egl->textures[textureCounter].vignette);
+
+			// Specify resolutions
+			GLfloat screen_resolution[] = {egl->screen_width, egl->screen_height};
+			GLfloat ratioW = egl->screen_width / egl->textures[textureCounter].width;
+			GLfloat ratioH = egl->screen_height / egl->textures[textureCounter].height;
+			if(ratioW < ratioH) {
+				texture_resolution[0] = egl->textures[textureCounter].width * ratioW;
+				texture_resolution[1] = egl->textures[textureCounter].height * ratioW;
+			} else {
+				texture_resolution[0] = egl->textures[textureCounter].width * ratioH;
+				texture_resolution[1] = egl->textures[textureCounter].height * ratioH;
+			}
+			glUniform2fv(egl->unif_resolution, 1, screen_resolution);
+			glUniform2fv(egl->unif_texture_resolution, 1, texture_resolution);
 
 			glEnable(GL_BLEND); check();
 			//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); check();

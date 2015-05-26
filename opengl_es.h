@@ -13,6 +13,8 @@
 
 
 #define IMAGE_COUNT 2
+#define EGL_DEFAULT_COLOR_MODE 0
+#define EGL_DEFAULT_VIGNETTE false
 
 
 /**/
@@ -39,8 +41,10 @@ enum play_states {
 typedef struct
 {
 	GLuint glTextureID;
-	int width;
-	int height;
+	GLuint width;
+	GLuint height;
+	GLuint color_mode;
+	GLboolean vignette;
 } TEXTURE_TYPE;
 
 
@@ -61,6 +65,10 @@ typedef struct
 	GLuint faceBuffer;
 	GLuint attr_vertex;
 	GLuint unif_alpha;
+	GLuint unif_color_mode;
+	GLuint unif_vignette;
+	GLuint unif_resolution;
+	GLuint unif_texture_resolution;
 	GLuint unif_texture;
 	GLuint unif_Pmatrix;
 	GLuint unif_Vmatrix;
