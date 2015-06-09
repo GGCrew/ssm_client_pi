@@ -512,21 +512,15 @@ void egl_render_transition(EGL_TYPE *egl)
 
 			// Specify resolutions
 			GLfloat screen_resolution[] = {egl->screen_width, egl->screen_height};
-			fprintf(stdout, " screen_resolution: %f, %f\n", screen_resolution[0], screen_resolution[1]);
 			GLfloat ratioW = (GLfloat)egl->screen_width / egl->textures[textureCounter].width;
 			GLfloat ratioH = (GLfloat)egl->screen_height / egl->textures[textureCounter].height;
-			fprintf(stdout, "    ratioW, ratioH: %f, %f\n", ratioW, ratioH);
 			if(ratioW < ratioH) {
-				fprintf(stdout, "   ratioW < ratioH: true\n");
 				texture_resolution[0] = egl->textures[textureCounter].width * ratioW;
 				texture_resolution[1] = egl->textures[textureCounter].height * ratioW;
 			} else {
-				fprintf(stdout, "   ratioW < ratioH: false\n");
 				texture_resolution[0] = egl->textures[textureCounter].width * ratioH;
 				texture_resolution[1] = egl->textures[textureCounter].height * ratioH;
 			}
-			fprintf(stdout, "texture_resolution: %f, %f\n", texture_resolution[0], texture_resolution[1]);
-			fprintf(stdout, "\n\n");
 			glUniform2fv(egl->unif_resolution, 1, screen_resolution); check();
 			glUniform2fv(egl->unif_texture_resolution, 1, texture_resolution); check();
 
