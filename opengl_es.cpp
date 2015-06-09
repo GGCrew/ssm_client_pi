@@ -508,7 +508,7 @@ void egl_render_transition(EGL_TYPE *egl)
 			glUniform1i(egl->unif_color_mode, egl->textures[textureCounter].color_mode); check();
 
 			// Specify GLSL vignette (if any)
-			glUniform1i(egl->unif_vignette, egl->textures[textureCounter].vignette);
+			glUniform1i(egl->unif_vignette, egl->textures[textureCounter].vignette); check();
 
 			// Specify resolutions
 			GLfloat screen_resolution[] = {egl->screen_width, egl->screen_height};
@@ -521,8 +521,10 @@ void egl_render_transition(EGL_TYPE *egl)
 				texture_resolution[0] = egl->textures[textureCounter].width * ratioH;
 				texture_resolution[1] = egl->textures[textureCounter].height * ratioH;
 			}
-			glUniform2fv(egl->unif_resolution, 1, screen_resolution);
-			glUniform2fv(egl->unif_texture_resolution, 1, texture_resolution);
+			fprintf(stdout, " screen_resolution: %d, %d", screen_resolution[0], screen_resolution[1]);
+			fprintf(stdout, "texture_resolution: %d, %d", texture_resolution[0], texture_resolution[1]);
+			glUniform2fv(egl->unif_resolution, 1, screen_resolution); check();
+			glUniform2fv(egl->unif_texture_resolution, 1, texture_resolution); check();
 
 			glEnable(GL_BLEND); check();
 			//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); check();
