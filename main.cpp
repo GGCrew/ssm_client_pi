@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <ctype.h>	// isprint()
 #include <time.h>	// nanosleep()
+#include <string.h>	// memset()
 
 #include "opengl_es.h"
 #include "ssm_client.h"
@@ -28,7 +29,7 @@ int main (int argc, char *argv[])
 
 	/**/
 
-	bzero((char *) &server_name, sizeof(server_name)); // wipe it clean!
+	memset((char *) &server_name, '\0', sizeof(server_name)); // wipe it clean!
 
 
 	// Parse command line options
