@@ -17,7 +17,7 @@ CC=g++
 
 CFLAGS=`sdl-config --libs --cflags`
 INCLUDES=-I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux
-LDFLAGS=-L/opt/vc/lib -lbcm_host -lGLESv2 -lEGL -lSDL_image -ljson -lrt
+LDFLAGS=-L/opt/vc/lib -lbcm_host -lGLESv2 -lEGL -lSDL_image -ljson-c -lrt
 
 OBJECTFILES=main.o opengl_es.o ssm_client.o json.o ssm_server_scanner.o
 
@@ -43,7 +43,7 @@ json.o : json.cpp json.h
 ssm_server_scanner.o : ssm_server_scanner.cpp ssm_server_scanner.h json.h os_settings.h
 	$(CC) -c ssm_server_scanner.cpp $(INCLUDES)
 
-clean : 
+clean :
 	@rm ssm_client main.o opengl_es.o ssm_client.o json.o ssm_server_scanner.o
 
 install : ssm_client
